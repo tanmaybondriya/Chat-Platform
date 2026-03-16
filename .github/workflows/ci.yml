@@ -1,0 +1,107 @@
+name: CI Pipeline
+
+# Trigger on every push to main and on pull requests
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+
+    # Services — spin up MongoDB and Redis alongside the job
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Checkout your code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # 3. Install all dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. TypeScript type check
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: apps/server
+
+      # 5. ESLint
+      - name: Lint
+        run: npx eslint src --ext .ts
+        working-directory: apps/server
+
+      # 6. Run tests
+      - name: Run tests
+        run: npm test
+        working-directory: apps/server
+        env:
+          NODE_ENV: test
+          PORT: 5001
+          MONGODB_URI: mongodb://localhost:27017/chat-platform-test
+          JWT_ACCESS_SECRET: test_access_secret_minimum_32_characters_long
+          JWT_REFRESH_SECRET: test_refresh_secret_minimum_32_characters_long
+          JWT_ACCESS_EXPIRES_IN: 15m
+          JWT_REFRESH_EXPIRES_IN: 7d
+          REDIS_URL: redis://localhost:6379
+          CLIENT_URL: http://localhost:3000
+
+      # 7. Build check
+      - name: Build
+        run: npm run build
+        working-directory: apps/server
+
+  # Separate job for client
+  client:
+    name: Client Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        working-directory: apps/client
+
+      - name: Build client
+        run: npm run build
+        working-directory: apps/client
