@@ -17,7 +17,7 @@ const startServer = async (): Promise<void> => {
 
   await initializeSocket(httpServer);
 
-  httpServer.listen(env.PORT, () => {
+  httpServer.listen(env.PORT, '0.0.0.0', () => {
     logger.info(`🚀 Server running`, { port: env.PORT, environment: env.NODE_ENV });
   });
 };
