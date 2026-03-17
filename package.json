@@ -12,7 +12,7 @@
     "build": "npm run build --workspaces",
     "lint": "npm run build",
     "test": "npm run test --workspaces --if-present",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "keywords": [],
   "author": "",
