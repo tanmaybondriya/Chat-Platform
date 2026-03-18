@@ -1,10 +1,14 @@
 import { Queue } from 'bullmq';
 import { env } from '../config/env';
+const redisUrl = new URL(env.REDIS_URL);
 
 const bullMQConnection = {
   connection: {
-    host: new URL(env.REDIS_URL).hostname,
-    port: Number(new URL(env.REDIS_URL).port) || 6379,
+    host: redisUrl.hostname,
+    port: Number(redisUrl.port) || 6379,
+    password: redisUrl.password,
+    username: redisUrl.username || 'default',
+    tls: env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
   },
 };
 export interface NotificationJobData {
