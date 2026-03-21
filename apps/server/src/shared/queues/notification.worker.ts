@@ -2,10 +2,16 @@ import { Worker, Job } from 'bullmq';
 import { env } from '../config/env';
 import { NotificationJobData } from './notification.queue';
 import { logger } from '../config/logger';
+
+const redisUrl = new URL(env.REDIS_URL);
+
 const bullMQConnection = {
   connection: {
-    host: new URL(env.REDIS_URL).hostname,
-    port: Number(new URL(env.REDIS_URL).port) || 6379,
+    host: redisUrl.hostname,
+    port: Number(redisUrl.port) || 6379,
+    password: redisUrl.password,
+    username: redisUrl.username || 'default',
+    tls: env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
   },
 };
 
@@ -85,3 +91,4 @@ notificationWorker.on('error', (error) => {
 });
 
 logger.info('Notification worker started');
+logger.info('Redis host:', redisUrl.hostname);
