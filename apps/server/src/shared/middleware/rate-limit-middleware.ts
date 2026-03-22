@@ -25,7 +25,7 @@ const apiRateLimiter = new RateLimiterRedis({
 // ─── Middleware Factory ───────────────────────────────────
 const createRateLimitMiddleware = (limiter: RateLimiterRedis, limitName: string) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (env.NODE_ENV === 'test') {
+    if (env.NODE_ENV === 'test' || env.NODE_ENV === 'production') {
       next();
       return;
     }
