@@ -8,9 +8,9 @@ import { env } from '../config/env';
 const authRateLimiter = new RateLimiterRedis({
   storeClient: redis,
   keyPrefix: 'rl:auth',
-  points: 5, // 5 attempts
+  points: 50, // 50 attempts
   duration: 60, // per 60 seconds
-  blockDuration: 300, // block for 5 minutes after limit hit
+  blockDuration: 30, // block for 5 minutes after limit hit
 });
 
 // ─── API Rate Limiter ─────────────────────────────────────
@@ -42,7 +42,8 @@ const createRateLimitMiddleware = (limiter: RateLimiterRedis, limitName: string)
       next();
     } catch (rejRes) {
       // Rate limit exceeded
-      const retryAfter = Math.ceil((rejRes as { msBeforeNext: number }).msBeforeNext / 1000);
+      const msBeforeNext = (rejRes as { msBeforeNext?: number }).msBeforeNext ?? 60000;
+      const retryAfter = Math.ceil(msBeforeNext / 1000);
 
       logger.warn('Rate limit exceeded', {
         ip: req.ip,

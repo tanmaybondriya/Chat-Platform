@@ -23,7 +23,7 @@ export const RegisterPage = () => {
 
         {register.isError && (
           <div className="bg-red-950 border border-red-800 text-red-400 text-sm px-4 py-3 rounded-lg mb-4">
-            Registration failed.Try a different email
+            Registration failed. Try a different email
           </div>
         )}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
