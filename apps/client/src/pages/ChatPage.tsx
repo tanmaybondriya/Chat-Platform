@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRooms, useMessages, useJoinRoom } from '../hooks/useChat';
-import { useLogout } from '../hooks/useAuth';
+import { useLogout, useMe } from '../hooks/useAuth';
 import { getSocket, connectSocket } from '../socket/socket';
 import type { Message } from '../api/chat.api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,7 +16,7 @@ export const ChatPage = () => {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const queryClient = useQueryClient();
-
+  const { data: currentUser } = useMe();
   const { data: rooms = [], isLoading: roomsLoading } = useRooms();
 
   const { data: historicMessages = [] } = useMessages(activeRoomId);
@@ -74,19 +74,28 @@ export const ChatPage = () => {
     setRealTimeMessages([]); // clear realtime messages when switching rooms
 
     const socket = getSocket();
-    if (socket?.connected) {
-      socket.emit('room:join', { roomId: activeRoomId });
-    }
+    if (socket?.connected) return;
+    setRealTimeMessages([]);
   }, [activeRoomId]);
 
   const handleRoomSelect = async (roomId: string, roomName: string, isMember: boolean) => {
     if (!isMember) {
-      await joinRoom.mutateAsync(roomId);
-      setActiveRoomId(roomId);
-      setActiveRoomName(roomName);
+      try {
+        await joinRoom.mutateAsync(roomId); // ← join via REST first
+      } catch (error) {
+        console.error('Failed to join room:', error);
+        return;
+      }
     }
+    // Set active room after confirming membership
     setActiveRoomId(roomId);
     setActiveRoomName(roomName);
+
+    // Join via socket AFTER REST join confirms membership
+    const socket = getSocket();
+    if (socket?.connected) {
+      socket.emit('room:join', { roomId });
+    }
   };
 
   const handleSendMessage = () => {
@@ -177,7 +186,13 @@ export const ChatPage = () => {
               {rooms.map((room) => (
                 <button
                   key={room._id}
-                  onClick={() => handleRoomSelect(room._id, room.name, room.members.length > 0)}
+                  onClick={() =>
+                    handleRoomSelect(
+                      room._id,
+                      room.name,
+                      room.members.includes(currentUser?.id ?? ''),
+                    )
+                  }
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition
               ${
                 activeRoomId === room._id
