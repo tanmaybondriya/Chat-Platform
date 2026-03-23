@@ -32,10 +32,10 @@ export const authApi = {
     return res.data.data;
   },
   logout: async (): Promise<void> => {
-    await api.post('/api/logout');
+    await api.post('/auth/logout');
   },
   me: async (): Promise<AuthResponse['user']> => {
-    const res = await api.post('/api/me');
+    const res = await api.post('/auth/me');
     return res.data.data.user;
   },
   refresh: async (): Promise<string> => {

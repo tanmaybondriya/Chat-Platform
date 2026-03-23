@@ -4,6 +4,7 @@ import { useLogout } from '../hooks/useAuth';
 import { getSocket, connectSocket } from '../socket/socket';
 import type { Message } from '../api/chat.api';
 import { useQueryClient } from '@tanstack/react-query';
+import { CreateRoomModal } from '../components/CreateRoomModal';
 
 export const ChatPage = () => {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -13,7 +14,7 @@ export const ChatPage = () => {
   const [realTimeMessages, setRealTimeMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: rooms = [], isLoading: roomsLoading } = useRooms();
@@ -133,11 +134,10 @@ export const ChatPage = () => {
   return (
     <div className="flex h-screen bg-zinc-950 text-white">
       {/* Sidebar */}
-
-      <div className="w-60 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0 ">
+      <div className="w-60 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
         {/* Header */}
         <div className="px-4 py-4 border-b border-zinc-800 flex items-center justify-between">
-          <span>ChatApp</span>
+          <span className="font-bold text-white">💬 ChatApp</span>
           <button
             onClick={() => logout.mutate()}
             className="text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 px-2 py-1 rounded transition"
@@ -145,32 +145,45 @@ export const ChatPage = () => {
             Logout
           </button>
         </div>
+
         {/* Rooms */}
-        <div className="px-3 pt-4 pb-2">
-          <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider px-2 mb-2">
-            Rooms
-          </p>
+        <div className="px-3 pt-4 pb-2 flex-1 overflow-y-auto">
+          {/* Rooms header with + button */}
+          <div className="flex items-center justify-between px-2 mb-2">
+            <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider">Rooms</p>
+            <button
+              onClick={() => setShowCreateRoom(true)}
+              className="text-zinc-500 hover:text-zinc-200 hover:bg-zinc-700 w-5 h-5 rounded flex items-center justify-center transition text-lg leading-none"
+              title="Create Room"
+            >
+              +
+            </button>
+          </div>
+
           {roomsLoading ? (
-            <div className="text-zinc-600 text-sm px-2">Loading rooms...</div>
+            <div className="text-zinc-600 text-sm px-2">Loading...</div>
+          ) : rooms.length === 0 ? (
+            <div className="px-2">
+              <p className="text-zinc-600 text-xs mb-2">No rooms yet</p>
+              <button
+                onClick={() => setShowCreateRoom(true)}
+                className="text-indigo-400 hover:text-indigo-300 text-xs transition"
+              >
+                + Create your first room
+              </button>
+            </div>
           ) : (
             <div className="flex flex-col gap-0.5">
               {rooms.map((room) => (
                 <button
                   key={room._id}
-                  onClick={() =>
-                    handleRoomSelect(
-                      room._id,
-                      room.name,
-                      room.members.some((m) => m === room._id),
-                    )
-                  }
+                  onClick={() => handleRoomSelect(room._id, room.name, room.members.length > 0)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition
-                    ${
-                      activeRoomId === room._id
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
-                    }
-                    `}
+              ${
+                activeRoomId === room._id
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+              }`}
                 >
                   <span className="text-zinc-500">#</span>
                   <span className="truncate">{room.name}</span>
@@ -246,6 +259,8 @@ export const ChatPage = () => {
           </div>
         )}
       </div>
+      {/* Create Room Modal */}
+      {showCreateRoom && <CreateRoomModal onClose={() => setShowCreateRoom(false)} />}
     </div>
   );
 };
