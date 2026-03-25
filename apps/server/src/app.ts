@@ -10,7 +10,8 @@ import { requestLogger } from './shared/middleware/request-logger-middleware';
 import { apiLimiter } from './shared/middleware/rate-limit-middleware';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './shared/config/swagger';
-
+import dmRoutes from './modules/dm/dm.routes';
+import usersRoutes from './modules/users/user.routes';
 const app: Application = express();
 
 app.use(helmet());
@@ -45,7 +46,8 @@ app.get('/health', (_req, res) => {
     timeStamp: new Date().toISOString(),
   });
 });
-
+app.use('/api/dm', dmRoutes);
+app.use('/api/users', usersRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

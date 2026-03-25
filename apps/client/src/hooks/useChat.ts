@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { chatApi } from '../api/chat.api';
+import { chatApi, dmApi } from '../api/chat.api';
 
 export const useRooms = () => {
   return useQuery({
@@ -35,6 +35,33 @@ export const useCreateRoom = () => {
     mutationFn: chatApi.createRoom,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
+    },
+  });
+};
+
+export const useDmConversations = () => {
+  return useQuery({
+    queryKey: ['dm-conversations'],
+    queryFn: dmApi.getConversation,
+    staleTime: 30 * 1000,
+  });
+};
+
+export const useDMMessages = (dmId: string | null) => {
+  return useQuery({
+    queryKey: ['dm-messages', dmId],
+    queryFn: () => dmApi.getMessages(dmId!),
+    enabled: !!dmId,
+    staleTime: 0,
+  });
+};
+
+export const useStartDM = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => dmApi.getOrCreateConversation(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dm-conversations'] });
     },
   });
 };

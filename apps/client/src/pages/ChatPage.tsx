@@ -5,6 +5,9 @@ import { getSocket, connectSocket } from '../socket/socket';
 import type { Message } from '../api/chat.api';
 import { useQueryClient } from '@tanstack/react-query';
 import { CreateRoomModal } from '../components/CreateRoomModal';
+import { useDmConversations, useDMMessages } from '../hooks/useChat';
+import { UserSearchModal } from '../components/UserSearchModal';
+import type { DMMessage } from '../api/chat.api';
 
 export const ChatPage = () => {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -12,16 +15,23 @@ export const ChatPage = () => {
   const [newMessage, setNewMessage] = useState('');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [realTimeMessages, setRealTimeMessages] = useState<Message[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeDMId, setactiveDMId] = useState<string | null>(null);
+  const [activeDMName, setActiveDMName] = useState<string>('');
+  const [showUserSearch, setShowUserSearch] = useState(false);
+  const [realtimeDMMessages, setRealtimeDMMessages] = useState<DMMessage[]>([]);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const queryClient = useQueryClient();
-  const { data: currentUser } = useMe();
-  const { data: rooms = [], isLoading: roomsLoading } = useRooms();
 
-  const { data: historicMessages = [] } = useMessages(activeRoomId);
   const joinRoom = useJoinRoom();
   const logout = useLogout();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useMe();
+  const { data: rooms = [], isLoading: roomsLoading } = useRooms();
+  const { data: historicMessages = [] } = useMessages(activeRoomId);
+  const { data: dmConversations = [] } = useDmConversations();
+  const { data: historicDMMessages = [] } = useDMMessages(activeDMId);
 
   const allMessages = [...historicMessages, ...realTimeMessages].filter(
     (msg, index, self) => self.findIndex((m) => m._id === msg._id) === index,
@@ -61,10 +71,19 @@ export const ChatPage = () => {
       console.log('joined room:', roomId);
     });
 
+    socket.on('dm:new', (message: DMMessage) => {
+      if (message.conversationId === activeDMId) {
+        setRealtimeDMMessages((prev) => {
+          if (prev.find((m) => m._id === message._id)) return prev;
+          return [...prev, message];
+        });
+      }
+    });
     return () => {
       socket.off('message:new');
       socket.off('typing:update');
       socket.off('room:joined');
+      socket.off('dm:new');
     };
   }, [activeRoomId, queryClient]);
 
@@ -77,6 +96,16 @@ export const ChatPage = () => {
     if (socket?.connected) return;
     setRealTimeMessages([]);
   }, [activeRoomId]);
+
+  useEffect(() => {
+    if (!activeDMId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRealtimeDMMessages([]);
+    const socket = getSocket();
+    if (socket?.connected) {
+      socket.emit('dm:join', { conversationId: activeDMId });
+    }
+  }, [activeDMId]);
 
   const handleRoomSelect = async (roomId: string, roomName: string, isMember: boolean) => {
     if (!isMember) {
@@ -140,6 +169,15 @@ export const ChatPage = () => {
     return typeof msg.senderId === 'object' ? msg.senderId.username : msg.senderId;
   };
 
+  const handleSendDM = () => {
+    if (!newMessage.trim() || !activeDMId) return;
+    const socket = getSocket();
+    socket?.emit('dm:send', {
+      conversationId: activeDMId,
+      content: newMessage.trim(),
+    });
+    setNewMessage('');
+  };
   return (
     <div className="flex h-screen bg-zinc-950 text-white">
       {/* Sidebar */}
@@ -207,15 +245,98 @@ export const ChatPage = () => {
             </div>
           )}
         </div>
+        {/* Direct Messages */}
+        <div className="px-3 pt-4 pb-2">
+          <div className="flex items-center justify-between px-2 mb-2">
+            <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wide">
+              Direct Messages
+            </p>
+            <button
+              onClick={() => setShowUserSearch(true)}
+              title="New DM"
+              className="text-zinc-500 hover:bg-zinc-700 w-5 h-5 rounded flex items-center justify-center transition text-lg"
+            >
+              +
+            </button>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {dmConversations.map((dm) => {
+              const other = dm.participants.find((p) => p._id !== currentUser?.id);
+              return (
+                <button
+                  key={dm._id}
+                  onClick={() => {
+                    setactiveDMId(dm._id);
+                    setActiveDMName(other?.username ?? 'Unknown');
+                    setActiveRoomId(null); //deselect room
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition ${activeDMId === dm._id ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                >
+                  <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold shrink-0">
+                    {other?.username[0].toUpperCase()}
+                  </div>
+                  <span className="truncate">{other?.username}</span>
+                  <div
+                    className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${other?.isOnline ? 'bg-green-500' : 'bg-transparent'}`}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Main content */}
 
       <div className="flex flex-col flex-1 min-w-0">
-        {activeRoomId ? (
+        {activeDMId ? (
+          <>
+            <div>
+              <div>{activeDMName[0]?.toUpperCase()}</div>
+              <span>{activeDMName}</span>
+            </div>
+
+            <div>
+              {[...historicDMMessages, ...realtimeDMMessages]
+                .filter((msg, i, self) => self.findIndex((m) => m._id === msg._id) === i)
+                .map((msg) => (
+                  <div key={msg._id}>
+                    <span>
+                      {typeof msg.senderId === 'object' ? msg.senderId.username : msg.senderId}
+                    </span>
+                    <span>{msg.content}</span>
+                    <span>{new Date(msg.createdAt).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              <div ref={messagesEndRef} />
+            </div>
+            <div>
+              <input
+                className=""
+                placeholder={`Message ${activeDMName}`}
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendDM();
+                  }
+                }}
+              />
+              <button
+                onClick={handleSendDM}
+                disabled={!newMessage.trim()}
+                className="bg-indigo-600"
+              >
+                Send
+              </button>
+            </div>
+          </>
+        ) : activeRoomId ? (
           <>
             {/* Room Header */}
             <div className="px-6 py-4 border-b border-zinc-800 flex items-center gap-2">
+              <div className="w-6 h-7 rounded-full"></div>
               <span className="text-zinc-500">#</span>
               <span className="font-semibold text-white">{activeRoomName}</span>
             </div>
@@ -276,6 +397,16 @@ export const ChatPage = () => {
       </div>
       {/* Create Room Modal */}
       {showCreateRoom && <CreateRoomModal onClose={() => setShowCreateRoom(false)} />}
+      {showUserSearch && (
+        <UserSearchModal
+          onClose={() => setShowUserSearch(false)}
+          onSelectConversation={(dmId, username) => {
+            setactiveDMId(dmId);
+            setActiveDMName(username);
+            setActiveRoomId(null);
+          }}
+        />
+      )}
     </div>
   );
 };

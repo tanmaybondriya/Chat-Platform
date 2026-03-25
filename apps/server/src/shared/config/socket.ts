@@ -8,6 +8,7 @@ import { TokenPayload } from '../types/auth.types';
 import { ChatRepository } from '../../modules/chat/chat.repository';
 import { notificationQueue } from '../queues/notification.queue';
 import { logger } from './logger';
+import { DMRepository } from '../../modules/dm/dm.repository';
 export interface AuthenticatedSocket extends Socket {
   user?: TokenPayload;
 }
@@ -67,6 +68,7 @@ export const initializeSocket = async (httpServer: HTTPServer): Promise<SocketSe
 // ─── Chat Event Handlers ─────────────────────────────────
 const registerChatEvents = (socket: AuthenticatedSocket, io: SocketServer): void => {
   const repo = new ChatRepository();
+  const dmRepo = new DMRepository();
 
   // ── Join Room ────────────────────────────────────────
   socket.on('room:join', async (rawData: unknown) => {
@@ -189,7 +191,7 @@ const registerChatEvents = (socket: AuthenticatedSocket, io: SocketServer): void
     });
   });
 
-  // ── Read Receipts ────────────────────────────────────
+  // ── Read Receipts ───────────────────────────────────
   socket.on('message:read', async (rawData: unknown) => {
     try {
       const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
@@ -205,7 +207,82 @@ const registerChatEvents = (socket: AuthenticatedSocket, io: SocketServer): void
       socket.emit('error', { message: 'Failed to mark message as read' });
     }
   });
+
+  socket.on('dm:send', async (rawData: unknown) => {
+    try {
+      const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      const { conversationId, content } = data as {
+        conversationId: string;
+        content: string;
+      };
+      const userId = socket.user!.userId;
+
+      if (!content?.trim()) {
+        socket.emit('error', { message: 'Message cannout be empty' });
+        return;
+      }
+
+      //Verify participant
+
+      const isParticipant = await dmRepo.isParticipant(conversationId, userId);
+      if (!isParticipant) {
+        socket.emit('error', { message: 'Not a participant' });
+        return;
+      }
+
+      const message = await dmRepo.saveMessage({
+        conversationId,
+        senderId: userId,
+        content: content.trim(),
+      });
+
+      //emit to both participants via theri personal rooms
+      io.to(`dm:${conversationId}`).emit(`dm:new`, {
+        _id: message._id,
+        conversationId,
+        senderId: {
+          _id: userId,
+          username: socket.user!.username,
+        },
+        content: message.content,
+        createdAt: message.createdAt,
+      });
+
+      await notificationQueue.add('new_message', {
+        type: 'new_message',
+        messageId: message._id.toString(),
+        roomId: conversationId,
+        senderId: userId,
+        recipientIds: [],
+        content: content.trim(),
+      });
+    } catch (error) {
+      console.error('dm:send error:', error);
+      socket.emit('error', { message: 'Failed to send DM' });
+    }
+  });
+
+  socket.on('dm:join', async (rawData: unknown) => {
+    try {
+      const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      const { conversationId } = data as { conversationId: string };
+      const userId = socket.user!.userId;
+
+      const isParticipant = await dmRepo.isParticipant(conversationId, userId);
+      if (!isParticipant) {
+        socket.emit('error', { message: 'Not a aprticipant' });
+        return;
+      }
+      await socket.join(`dm:${conversationId}`);
+      socket.emit(`dm:joined`, { conversationId });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) {
+      socket.emit('error', { message: 'Failed to join DM' });
+    }
+  });
 };
+
+//  ──Send Dm ───────────────────────────────────
 
 export const getIO = (): SocketServer => {
   if (!io) throw new Error('Socket.io not initialized');
