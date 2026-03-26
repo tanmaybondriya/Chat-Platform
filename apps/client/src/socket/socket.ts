@@ -4,27 +4,35 @@ import { authStore } from '../store/auth.store';
 let socket: Socket | null = null;
 
 export const connectSocket = (): Socket => {
-  if (socket?.connected) return socket;
+  const token = authStore.getToken();
 
-  socket = io('http://localhost:5000', {
-    auth: { token: authStore.getToken() }, //send JWT in handshake
-    autoConnect: true,
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-  });
+  if (!socket) {
+    socket = io('http://localhost:5000', {
+      auth: { token }, //send JWT in handshake
+      autoConnect: false,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
 
-  socket.on('connect', () => {
-    console.log('socket connected', socket?.id);
-  });
+    socket.on('connect', () => {
+      console.log('socket connected', socket?.id);
+    });
 
-  socket.on('disconnected', (reason) => {
-    console.log('Socket disconnected', reason);
-  });
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected', reason);
+    });
 
-  socket.on('error', (error) => {
-    console.error('Socket error:', error);
-  });
+    socket.on('error', (error) => {
+      console.error('Socket error:', error);
+    });
+  }
+
+  socket.auth = { token };
+
+  if (!socket.connected) {
+    socket.connect();
+  }
 
   return socket;
 };

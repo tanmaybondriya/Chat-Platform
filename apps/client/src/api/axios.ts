@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { authStore } from '../store/auth.store';
-
+import { connectSocket, disconnectSocket } from '../socket/socket';
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true, // Send httpOnly cookies (refresh token)
@@ -40,7 +40,11 @@ api.interceptors.response.use(
   (response) => response, // Pass successful responses through
   async (error) => {
     const originalRequest = error.config;
-
+    if (originalRequest?.url?.includes('/auth/refresh')) {
+      authStore.clearAuth();
+      disconnectSocket();
+      return Promise.reject(error);
+    }
     // If 401 and not already retrying
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -62,6 +66,14 @@ api.interceptors.response.use(
         const newToken = response.data.data.accessToken;
 
         authStore.setToken(newToken);
+        const user = authStore.getUser();
+        if (user) {
+          authStore.setAuthenticated(newToken, user);
+        }
+
+        disconnectSocket();
+        connectSocket();
+
         processQueue(null, newToken);
 
         // Retry original request with new token
@@ -69,9 +81,9 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         // Refresh failed — user must login again
-        authStore.clearToken();
+        authStore.clearAuth();
+        disconnectSocket();
         processQueue(refreshError);
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

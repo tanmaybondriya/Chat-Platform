@@ -24,7 +24,7 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
 };
 
 export const blacklistToken = async (token: string, expiresInSeconds: number): Promise<void> => {
-  await redis.setex(`blacklist: ${token}`, expiresInSeconds, '1');
+  await redis.setex(`blacklist:${token}`, expiresInSeconds, '1');
 };
 
 export const isTokenBlacklisted = async (token: string): Promise<boolean> => {

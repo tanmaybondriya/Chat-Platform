@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ChatPage } from './pages/ChatPage';
-import { authStore } from './store/auth.store';
+import { useAuthBootstrap } from './hooks/useAuth';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,11 +14,23 @@ const queryClient = new QueryClient({
   },
 });
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  return authStore.isAuthenticated() ? <>{children}</> : <Navigate to="/login" />;
+const ProtectedRoute = ({
+  children,
+  status,
+}: {
+  children: React.ReactNode;
+  status: 'bootstrapping' | 'authenticated' | 'unauthenticated';
+}) => {
+  if (status === 'bootstrapping') {
+    return <div>Loading...</div>;
+  }
+
+  return status === 'authenticated' ? <>{children}</> : <Navigate to="/login" />;
 };
 
 function App() {
+  const authStatus = useAuthBootstrap();
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -28,7 +40,7 @@ function App() {
           <Route
             path="/chat"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute status={authStatus}>
                 <ChatPage />
               </ProtectedRoute>
             }
